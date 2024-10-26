@@ -10,18 +10,9 @@
 #define screenWidth 500
 #define screenHeight 400
 
-// 
-// Todo => dynamic ListBox Height => based on the amount of good proxies + default height
-//	
-// Todo => dyanmic text lining in the ListBox => width should probably be bigger =>
-//			  probably have to mess with textMeasure for finding the width and height
-//			  of the texts => the size can also be used for resizing the the ListBox
-//			  imagine the default height is 400 , but a single line of proxy has a height of 10px
-// 		  we can add the value to the ListBox height value => must not forget about dynamicly
-//			  changing ScrollBar Offset and its properties to give a smooth feeling to the ListBox
-
 Vector2 GetCenteredTextPosition(Rectangle rect, const char *text, int fontSize);
 void DrawStartButton(int mouseX, int mouseY, char *debug);
+static int scrollMax = 20;
 
 int main(void)
 {
@@ -31,13 +22,16 @@ int main(void)
 	char Debug[20];
 	char *StartButtonLabel = "START";
 	int scrollOffset = 0;
-	int scrollMax = 400;
 	Rectangle scrollBarRec = {475, 0, 25, 400};
 	Rectangle listBox = {250, 0, 250, 400};
 	
-	char proxies[100] = "1 - 187.19.127.246:8011";
-	int textWidth = MeasureText(proxies , 20);
-	int i = 0;
+	FILE *file = fopen("proxies.txt" , "r");
+	char line[128];
+	int linenumber = 1;
+	if (file == NULL){
+		printf("Proxies.txt Not Found");
+		return 1;
+	}
 	
 	while (!WindowShouldClose())
 	{
@@ -46,19 +40,37 @@ int main(void)
 		int mousePosY = GetMouseY();
 		sprintf(Debug, "%d", mousePosX);
 		
+		printf("Current Scroll Offset: %d\n", scrollOffset);
+		printf("MaxScrollOffset: %d \n", scrollMax);
 		BeginDrawing();
 		ClearBackground(DARKISH);
-				
+			
 		// Create the scrollbar and the listbox
+		// Todo => increment scrollMax by 1 everytime we get a good proxy =>
+		// thats all we need for a dynamic Listbox
 		scrollOffset = GuiScrollBar(scrollBarRec, scrollOffset, 0, scrollMax);
-		DrawRectangle(225, 0, 250, 10000 - scrollOffset , DARKMODERN);
+		DrawRectangle(225, 0, 250, 400 , DARKMODERN);
 		
-		// Draw the start Button 
 		DrawStartButton(mousePosX, mousePosY, Debug);
 		
-		// Draw centered text
+		// Draw a centered text for StartButton => we can use the same function for other stuff
 		Vector2 position = GetCenteredTextPosition(StartButton, StartButtonLabel, 20);
 		DrawText(StartButtonLabel, position.x, position.y, 20, YELLOW);
+		
+		DrawText("Proxy" , 300 , 200 , 20 , YELLOW);
+		
+		
+		// TODO
+		//  im stupid , fgets works with a FILE pointer , this thing works dynamicly
+		//  this is only going to run about 20 time then the condition is not met anymore
+		//  which is why we need an array or a way to store this garbo
+		//  but the problem is that an array isnt dynamic , so how do we handle the read and write
+		//  to the file ? while also updating the array ?
+		//  need to learn how to write a dynamic array in C => dynamic memory allocation :D
+		// TODO
+		while (fgets(line , sizeof(line) , file) != NULL){
+			DrawText(line , 200 , 0 , 20 , YELLOW);
+		}
 		
 		EndDrawing();
 	}
@@ -89,5 +101,6 @@ void DrawStartButton(int mouseX, int mouseY, char *debug)
 	if (CheckCollisionPointRec(mouseVector, StartButton) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
 	{
 		DrawText(debug, 200, 200, 40, DARKBROWN);
+		scrollMax++;
 	}
 }
