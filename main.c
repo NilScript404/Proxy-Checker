@@ -15,7 +15,7 @@
 //	
 // Todo => dyanmic text lining in the ListBox => width should probably be bigger =>
 //			  probably have to mess with textMeasure for finding the width and height
-//			  of the texts => can the size can also be used for resizing the the ListBox
+//			  of the texts => the size can also be used for resizing the the ListBox
 //			  imagine the default height is 400 , but a single line of proxy has a height of 10px
 // 		  we can add the value to the ListBox height value => must not forget about dynamicly
 //			  changing ScrollBar Offset and its properties to give a smooth feeling to the ListBox
@@ -35,6 +35,10 @@ int main(void)
 	Rectangle scrollBarRec = {475, 0, 25, 400};
 	Rectangle listBox = {250, 0, 250, 400};
 	
+	char proxies[100] = "1 - 187.19.127.246:8011";
+	int textWidth = MeasureText(proxies , 20);
+	int i = 0;
+	
 	while (!WindowShouldClose())
 	{
 		// Update mouse position
@@ -44,12 +48,12 @@ int main(void)
 		
 		BeginDrawing();
 		ClearBackground(DARKISH);
-		
+				
 		// Create the scrollbar and the listbox
 		scrollOffset = GuiScrollBar(scrollBarRec, scrollOffset, 0, scrollMax);
 		DrawRectangle(225, 0, 250, 10000 - scrollOffset , DARKMODERN);
 		
-		// Draw the start button and list box
+		// Draw the start Button 
 		DrawStartButton(mousePosX, mousePosY, Debug);
 		
 		// Draw centered text
