@@ -1,12 +1,16 @@
-// Todo => cleaning up the main loop
-//      => single threaded proxy checking D:
-//      => multithreaded proxy checking => phthreads ?
+#define WIN32_LEAN_AND_MEAN  // Exclude rarely-used services from windows headers
+#define NOGDI                // Exclude GDI functions and definitions
+#define NODRAWTEXT           // Exclude DrawText() and DT_* constants
+#define NOCLOSE              // Exclude CloseWindow()
+#define NOSHOWWINDOW         // Exclude ShowWindow() and related functions
+#define NOUSER               // Exclude all USER specific functions
 
 #include <raylib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #define RAYGUI_IMPLEMENTATION
 #include <raygui.h>
+#include <curl/curl.h>
 
 #define DARKISH (Color) { 19, 20, 21, 255 }
 #define DARKMODERN (Color) { 37, 38, 44, 255 }
@@ -14,9 +18,19 @@
 #define screenWidth 500
 #define screenHeight 400
 
+
+
+// ------------------Curl requests------------------
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp);
+void HandleResponse(char *proxy, CURL *curl, CURLcode curlCode);
+void PerformProxyRequest(char *proxy, const char *URL);
+// ------------------Curl requests------------------
+
+// ------------------Raylib-------------------------
 Vector2 GetCenteredTextPosition(Rectangle rect, const char *text, int fontSize);
 void DrawStartButton(int mouseX, int mouseY, char *debug);
 static int scrollMax = 20;
+// ------------------Raylib-------------------------
 
 typedef struct {
 	char **data;
@@ -68,11 +82,9 @@ Vector2 GetCenteredTextPosition(Rectangle rect, const char *text, int fontSize)
 {
 	int textWidth = MeasureText(text, fontSize); 			// Measure the width and height of the text
 	int textHeight = fontSize; 									// Set height to the font size
-	
 	Vector2 position;													// Calculate the centered position
 	position.x = rect.x + (rect.width - textWidth) / 2;	// Center horizontally
 	position.y = rect.y + (rect.height - textHeight) / 2; // Center vertically
-	
 	return position; 													// Return the calculated position
 }
 
@@ -80,14 +92,80 @@ Vector2 GetCenteredTextPosition(Rectangle rect, const char *text, int fontSize)
 void DrawStartButton(int mouseX, int mouseY, char *debug)
 {
 	Vector2 mouseVector = {mouseX, mouseY};
-	
 	DrawRectangleRounded(StartButton, 0.2, 16, DARKMODERN);
-	
 	if (CheckCollisionPointRec(mouseVector, StartButton) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
 	{
 		DrawText(debug, 200, 200, 40, DARKBROWN);
 		scrollMax++;
 	}
+}
+
+
+// stops curl from printing the the response , which always happens when we perform the request
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+   (void)contents; // ignore unused parameter warning
+   (void)userp;    // ignore unused parameter warning
+	// the actual size of the data chunk , this is the only thing libcurl needs to confirm
+	// that WriteCallback has been successfull
+	return size * nmemb; 
+}
+
+// it makes save to have two dynamic arrays , one for good proxies , another for bad proxies
+// save each array into a seperate text file , but only render the good ones xd
+// need a global variables for counting the number of good proxies
+// same as bad proxies
+void Responsehandler(char *proxy , CURL *curl , CURLcode curlCode){
+	
+	int intstatusCode;
+	char stringstatusCode[20];
+	const char *Err = curl_easy_strerror(curlCode);
+	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &intstatusCode);
+	snprintf(stringstatusCode, sizeof(stringstatusCode), "%d", intstatusCode);
+	
+	if (curlCode == CURLE_OK) {
+		// append the proxy : DELAY to the Good array
+		// good++
+	} else if  (intstatusCode > 400) {
+		// append the PROXY : StatusCode to the Bad array
+		// bad++
+		proxy = (char *)malloc(strlen(proxy) + strlen(stringstatusCode) + 1);
+		strcat(proxy , stringstatusCode);
+	} else {
+		// append the PROXY : ERROR to the Bad array
+		// bad++
+		proxy = (char *)malloc(strlen(proxy) + strlen(Err) + 1);
+		strcat(proxy, Err);
+	}
+	// for debugging purposes
+	printf("%s", proxy);
+}
+
+// performs the request and sends the response to the ResponeHandler function 
+void ProxyRequest(char *proxy , char *URL){
+	CURL *curl;
+	curl = curl_easy_init();
+	if (!curl) {
+		// append to the Bad Array PROXY : HANDLER Creation failed
+		printf("Failed at creating the handler");
+		return;
+	}
+	
+	CURLcode curlCode;
+	curl_easy_setopt(curl, CURLOPT_URL, URL);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 10000L);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+	
+	curlCode = curl_easy_perform(curl);
+	Responsehandler("Proxy" , curl , curlCode);
+	curl_easy_cleanup(curl);
+	
+	// ------------------TODO------------------
+	// curl_easy_setopt(curl, CURLOPT_TIMEOUT, 1L);
+	// curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 2L);
+	// curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1000000000L);
+	// ------------------TODO------------------
 }
 
 int main(void)
@@ -116,8 +194,41 @@ int main(void)
 	StringArray proxiesBuffer;
 	init_array(&proxiesBuffer, 40);
 	
+	// good array for storing good proxies
+	StringArray goodBuffer;
+	init_array(&goodBuffer, 40);
+	int totalproxies = 2;
+	int j = 1;
 	while (!WindowShouldClose())
 	{
+		// performing requests in a loop sounds like insanity so theres gotta be a better way
+		// our main function is ran once , maybe if we use multiple threads before entering
+		// the render loop , we can check the proxies , but the issue is that we need to
+		// keep updating variables , and also render the updated array
+		// lets say we create two threads
+		// 1 => gets one good proxy => update the array
+		// 2 => gets a bad proxy => update the bad array
+		// since we had a dynamic array , updating the array and rendering the proxy shouldnt be
+		// any issue
+		// so in theory , we can spawn many threads , but managing many threads is an issue on
+		// its own
+		// so lets focus on a single thread
+		// the thread must perform the request , when the request is done , regardless of the result
+		// it should start a new request with the next proxy
+		// so we need a thread which exectues the Request function on different proxy , one by one
+		// its easy to know which proxy it should request
+		// but running the thread once again or performing the request for the next proxy with
+		// a single thread might be a lil hard
+		// like how do you know when to stop the thread from executing the request function ? =>
+		// based on how many proxies we had ofc , if we have 40 , we need the loop to run 40 times
+		// and each time its going to exectute the request , with a different proxy untill all of the
+		// proxies are checked.
+		// tl;dr => spwan a thread , let it run a loop untill all proxies are checked
+		while (j <= totalproxies){
+			
+			j++;
+		}
+
 		// Update mouse position
 		int mousePosX = GetMouseX();
 		int mousePosY = GetMouseY();
