@@ -1,150 +1,276 @@
-#include "raylib.h"
-#include <stdlib.h>
-#include <string.h>
+#define WIN32_LEAN_AND_MEAN  // Exclude rarely-used services from windows headers
+#define NOGDI                // Exclude GDI functions and definitions
+#define NODRAWTEXT           // Exclude DrawText() and DT_* constants
+#define NOCLOSE              // Exclude CloseWindow()
+#define NOSHOWWINDOW         // Exclude ShowWindow() and related functions
+#define NOUSER               // Exclude all USER specific functions
+
+#include <raylib.h>
 #include <stdio.h>
+#include <stdlib.h>
+#define RAYGUI_IMPLEMENTATION
+#include <raygui.h>
+#include <curl/curl.h>
 
-#define Background (Color) { 245, 245, 245, 255 }
-#define DisplayBackground (Color) { 242, 242, 242, 255 }
-#define ButtonNumber (Color) { 208, 231, 249, 255 }
-#define ButtonFunction (Color) { 243, 156, 18, 255 }
-#define ButtonClear (Color) { 247, 140, 107, 255 }
-#define ButtonEquals (Color) { 52, 199, 89, 255 }
+#define DARKISH (Color) { 19, 20, 21, 255 }
+#define DARKMODERN (Color) { 37, 38, 44, 255 }
+#define StartButton (Rectangle) { 0, 0, 120, 50 }
+#define screenWidth 500
+#define screenHeight 400
 
-typedef enum
-{
-	BUTTON_TYPE_NUMBER,
-	BUTTON_TYPE_FUNCTION,
-	BUTTON_TYPE_CLEAR,
-	BUTTON_TYPE_EQUALS
-} ButtonType;
 
-ButtonType buttonTypes[16] = 
-{
-	BUTTON_TYPE_NUMBER, BUTTON_TYPE_NUMBER, BUTTON_TYPE_NUMBER, BUTTON_TYPE_FUNCTION,
-	BUTTON_TYPE_NUMBER, BUTTON_TYPE_NUMBER, BUTTON_TYPE_NUMBER, BUTTON_TYPE_FUNCTION,
-	BUTTON_TYPE_NUMBER, BUTTON_TYPE_NUMBER, BUTTON_TYPE_NUMBER, BUTTON_TYPE_FUNCTION,
-	BUTTON_TYPE_EQUALS, BUTTON_TYPE_NUMBER, BUTTON_TYPE_CLEAR, BUTTON_TYPE_FUNCTION
-};
 
-Rectangle recs[16];
+// ------------------Curl requests------------------
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp);
+void HandleResponse(char *proxy, CURL *curl, CURLcode curlCode);
+void PerformProxyRequest(char *proxy, const char *URL);
+// ------------------Curl requests------------------
 
-// why ? because if i use something like char labels[16] , then i would have to convert each
-// character to an string later on ( when i want to use string functions such as strcat)
-// but , if i have an array of string and if each string is a single character , i can just
-// do the same thing but without having to convert ( by accessing the characters via labels[index][0])
-const char *labels[16] = 
-{
-	"1", "2", "3", "/",
-	"4", "5", "6", "X",
-	"7", "8", "9", "-",
-	"=", "0", "C", "+"
-};
+// ------------------Raylib-------------------------
+Vector2 GetCenteredTextPosition(Rectangle rect, const char *text, int fontSize);
+void DrawStartButton(int mouseX, int mouseY, char *debug);
+static int scrollMax = 20;
+// ------------------Raylib-------------------------
 
-Color colors[16] =
-{
-	ButtonNumber, ButtonNumber, ButtonNumber, ButtonFunction,
-	ButtonNumber, ButtonNumber, ButtonNumber, ButtonFunction,
-	ButtonNumber, ButtonNumber, ButtonNumber, ButtonFunction,
-	ButtonEquals, ButtonNumber, ButtonClear, ButtonFunction
-};
+typedef struct {
+	char **data;
+	int count;
+	int capacity;
+} StringArray;
 
-char num1[5];
-char operation;
-char num2[5];
-char Display[40];
-int counter = 0;
-
-void calculate(char num1[], char num2[], char operation) {
-	char Str[10];
-	int n1 = atoi(num1);
-	int n2 = atoi(num2);
-	int result = 0;
+void init_array(StringArray *array, int initial_capacity) {
+	array->data = (char **)malloc(initial_capacity * sizeof(char *));
+	array->count = 0;
+	array->capacity = initial_capacity;
 	
-	if (operation == '+') {
-		result = n1 + n2;
-	} else if (operation == '-') {
-		result = n1 - n2;
-	} else if (operation == 'X') {
-		result = n1 * n2;
-	} else if (operation == '/') {
-		if (n2 != 0) {
-			result = n1 / n2;
-		} else {
-			strcpy(Str, "Error");
-			memset(Display, 0, sizeof(Display));
-			strcat(Display, Str);
-			return;
+	if (array->data == NULL) {
+		printf("Memory Allocation Failed\n");
+		exit(1);
+	}
+}
+// since we needed a dynamic array
+void add_string(StringArray *array, const char *str) {
+	if (array->count == array->capacity) {
+		array->capacity *= 2;
+		array->data = (char **)realloc(array->data, array->capacity * sizeof(char *));
+		if (array->data == NULL) {
+			printf("Memory Reallocation Failed\n");
+			exit(1);
 		}
 	}
 	
-	sprintf(Str, "%d", result);
-	strcat(Display, Str);
+	array->data[array->count] = (char *)malloc(strlen(str) + 1);
+	if (array->data[array->count] == NULL) {
+		printf("String Memory Allocation Failed\n");
+		exit(1);
+	}
+	strcpy(array->data[array->count], str);
+	array->count++;
+}
+// i dont think we even need this
+void free_array(StringArray *array) {
+	for (int i = 0; i < array->count; i++) {
+		free(array->data[i]);
+	}
+	free(array->data);
+	array->data = NULL;
+	array->count = 0;
+	array->capacity = 0;
 }
 
-int main(void) {
-	const int screenWidth = 350;
-	const int screenHeight = 450;
-	int margin = 10;
+Vector2 GetCenteredTextPosition(Rectangle rect, const char *text, int fontSize)
+{
+	int textWidth = MeasureText(text, fontSize); 			// Measure the width and height of the text
+	int textHeight = fontSize; 									// Set height to the font size
+	Vector2 position;													// Calculate the centered position
+	position.x = rect.x + (rect.width - textWidth) / 2;	// Center horizontally
+	position.y = rect.y + (rect.height - textHeight) / 2; // Center vertically
+	return position; 													// Return the calculated position
+}
+
+// We also handle the mouse click , thats why this function needs mousex and mousey
+void DrawStartButton(int mouseX, int mouseY, char *debug)
+{
+	Vector2 mouseVector = {mouseX, mouseY};
+	DrawRectangleRounded(StartButton, 0.2, 16, DARKMODERN);
+	if (CheckCollisionPointRec(mouseVector, StartButton) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+	{
+		DrawText(debug, 200, 200, 40, DARKBROWN);
+		scrollMax++;
+	}
+}
+
+
+// stops curl from printing the the response , which always happens when we perform the request
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+   (void)contents; // ignore unused parameter warning
+   (void)userp;    // ignore unused parameter warning
+	// the actual size of the data chunk , this is the only thing libcurl needs to confirm
+	// that WriteCallback has been successfull
+	return size * nmemb; 
+}
+
+// it makes save to have two dynamic arrays , one for good proxies , another for bad proxies
+// save each array into a seperate text file , but only render the good ones xd
+// need a global variables for counting the number of good proxies
+// same as bad proxies
+void Responsehandler(char *proxy , CURL *curl , CURLcode curlCode){
 	
-	InitWindow(screenWidth, screenHeight, "Calculator GUI");
-	Font customFont = LoadFontEx("FiraCode-Regular.ttf", 200, 0, 0);
-	int displayHeight = 100;
+	int intstatusCode;
+	char stringstatusCode[20];
+	const char *Err = curl_easy_strerror(curlCode);
+	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &intstatusCode);
+	snprintf(stringstatusCode, sizeof(stringstatusCode), "%d", intstatusCode);
 	
-	int index = 0;
-	for (int i = 1; i <= 4; i++) {
-		for (int j = 1; j <= 4; j++) {
-			recs[index] = (Rectangle){(float)((j - 1) * 75) + (margin * j), (float)((i - 1) * 75) + displayHeight + (margin * i), 75, 75};
-			index++;
-		}
+	if (curlCode == CURLE_OK) {
+		// append the proxy : DELAY to the Good array
+		// good++
+	} else if  (intstatusCode > 400) {
+		// append the PROXY : StatusCode to the Bad array
+		// bad++
+		proxy = (char *)malloc(strlen(proxy) + strlen(stringstatusCode) + 1);
+		strcat(proxy , stringstatusCode);
+	} else {
+		// append the PROXY : ERROR to the Bad array
+		// bad++
+		proxy = (char *)malloc(strlen(proxy) + strlen(Err) + 1);
+		strcat(proxy, Err);
+	}
+	// for debugging purposes
+	printf("%s", proxy);
+}
+
+// performs the request and sends the response to the ResponeHandler function 
+void ProxyRequest(char *proxy , char *URL){
+	CURL *curl;
+	curl = curl_easy_init();
+	if (!curl) {
+		// append to the Bad Array PROXY : HANDLER Creation failed
+		printf("Failed at creating the handler");
+		return;
 	}
 	
+	CURLcode curlCode;
+	curl_easy_setopt(curl, CURLOPT_URL, URL);
+	curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, 10000L);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+	
+	curlCode = curl_easy_perform(curl);
+	Responsehandler("Proxy" , curl , curlCode);
+	curl_easy_cleanup(curl);
+	
+	// ------------------TODO------------------
+	// curl_easy_setopt(curl, CURLOPT_TIMEOUT, 1L);
+	// curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 2L);
+	// curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1000000000L);
+	// ------------------TODO------------------
+}
+
+int main(void)
+{
+	InitWindow(screenWidth, screenHeight, "Raylib Window");
 	SetTargetFPS(60);
 	
-	while (!WindowShouldClose()) {
-		for (int i = 0; i < 16; i++) {
-			if (CheckCollisionPointRec(GetMousePosition(), recs[i]) && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-				if (i != 14) strcat(Display, labels[i]);
-				if (counter == 0 && (buttonTypes[i] == BUTTON_TYPE_NUMBER))
-				{
-					strcat(num1, labels[i]);
-				} else if (counter == 0 && (buttonTypes[i] == BUTTON_TYPE_FUNCTION))
-				{
-					operation = labels[i][0];
-					counter++;
-				} else if (counter == 1 && (buttonTypes[i] == BUTTON_TYPE_NUMBER))
-				{
-					strcat(num2, labels[i]);
-				} else if (counter == 1 && (buttonTypes[i] == BUTTON_TYPE_EQUALS))
-				{
-					//strcat(Display, labels[i]);
-					calculate(num1, num2, operation);
-					counter++;
-				} else if (buttonTypes[i] == BUTTON_TYPE_CLEAR)
-				{
-					counter = 0;
-					memset(Display, 0, sizeof(Display));
-					memset(num1, 0, sizeof(num1));
-					memset(num2, 0, sizeof(num2));
-				}
-			}
+	char Debug[20];
+	char *StartButtonLabel = "START";
+	
+	// Listbox and its scrolloffset
+	int scrollOffset = 0;
+	Rectangle scrollBarRec = {475, 0, 25, 400};
+	Rectangle listBox = {250, 0, 250, 400};
+	
+	// reading the file and the buffer that we use for storing the data
+	FILE *file = fopen("proxies.txt" , "r");
+	char line[128];
+	int linenumber = 1;
+	if (file == NULL){
+		printf("Proxies.txt Not Found");
+		return 1;
+	}
+	
+	// proxies array for storing the data from fgets
+	StringArray proxiesBuffer;
+	init_array(&proxiesBuffer, 40);
+	
+	// good array for storing good proxies
+	StringArray goodBuffer;
+	init_array(&goodBuffer, 40);
+	int totalproxies = 2;
+	int j = 1;
+	while (!WindowShouldClose())
+	{
+		// performing requests in a loop sounds like insanity so theres gotta be a better way
+		// our main function is ran once , maybe if we use multiple threads before entering
+		// the render loop , we can check the proxies , but the issue is that we need to
+		// keep updating variables , and also render the updated array
+		// lets say we create two threads
+		// 1 => gets one good proxy => update the array
+		// 2 => gets a bad proxy => update the bad array
+		// since we had a dynamic array , updating the array and rendering the proxy shouldnt be
+		// any issue
+		// so in theory , we can spawn many threads , but managing many threads is an issue on
+		// its own
+		// so lets focus on a single thread
+		// the thread must perform the request , when the request is done , regardless of the result
+		// it should start a new request with the next proxy
+		// so we need a thread which exectues the Request function on different proxy , one by one
+		// its easy to know which proxy it should request
+		// but running the thread once again or performing the request for the next proxy with
+		// a single thread might be a lil hard
+		// like how do you know when to stop the thread from executing the request function ? =>
+		// based on how many proxies we had ofc , if we have 40 , we need the loop to run 40 times
+		// and each time its going to exectute the request , with a different proxy untill all of the
+		// proxies are checked.
+		// tl;dr => spwan a thread , let it run a loop untill all proxies are checked
+		while (j <= totalproxies){
+			
+			j++;
 		}
+
+		// Update mouse position
+		int mousePosX = GetMouseX();
+		int mousePosY = GetMouseY();
+		sprintf(Debug, "%d", mousePosX);
 		
+		// Debug prints		
+		printf("Current Scroll Offset: %d\n", scrollOffset);
+		printf("MaxScrollOffset: %d \n", scrollMax);
 		BeginDrawing();
-		ClearBackground(Background);
+		ClearBackground(DARKISH);
 		
-		for (int i = 0; i < 16; i++) {
-			DrawRectangleRounded(recs[i], 0.0, 24, colors[i]);
-			DrawTextEx(customFont, labels[i], (Vector2){(recs[i].x + recs[i].width / 2) - 10, (recs[i].y + recs[i].height / 2) - 25}, 60, 0, DARKGRAY);
+		// Create the scrollbar and the listbox
+		// Todo => increment scrollMax by 1 everytime we get a good proxy =>
+		// thats all we need for a dynamic Listbox
+		scrollOffset = GuiScrollBar(scrollBarRec, scrollOffset, 0, scrollMax);
+		DrawRectangle(225, 0, 250, 400 , DARKMODERN);
+		
+		DrawStartButton(mousePosX, mousePosY, Debug);
+		
+		// Draw a centered text for StartButton => we can use the same function for other stuff
+		Vector2 position = GetCenteredTextPosition(StartButton, StartButtonLabel, 20);
+		DrawText(StartButtonLabel, position.x, position.y, 20, YELLOW);
+		
+		DrawText("Proxy" , 300 , 200 , 20 , YELLOW);
+		
+		while (fgets(line , sizeof(line) , file) != NULL){
+			add_string(&proxiesBuffer , line);
 		}
-		
-		DrawRectangle(0, 0, 350, 100, DisplayBackground);
-		DrawLineEx((Vector2){0, 100}, (Vector2){350, 100}, 3.0f, DARKGRAY);
-		DrawText(Display, 0, 30, 60, DARKGRAY);
-		
+		printf("%d", proxiesBuffer.count);
+		int minrender = scrollOffset; 
+		int maxrender = scrollOffset + 20;
+		int Ypos = 0;
+		while (minrender < maxrender && proxiesBuffer.count > minrender){
+			int currenty = 20 * minrender;
+			DrawText(proxiesBuffer.data[minrender] , 225 , Ypos * 20 , 20 , YELLOW);
+			minrender++;
+			Ypos++;
+		}
+			
 		EndDrawing();
 	}
 	
-	UnloadFont(customFont);
 	CloseWindow();
 	return 0;
 }
