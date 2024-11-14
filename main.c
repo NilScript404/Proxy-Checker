@@ -224,11 +224,54 @@ int main(void)
 		// and each time its going to exectute the request , with a different proxy untill all of the
 		// proxies are checked.
 		// tl;dr => spwan a thread , let it run a loop untill all proxies are checked
+		
+		// TODO
+		// multithreading => so far we are only using a single thread , and even that thread
+		// still doesnt have proper capturing and saving functionality.
+		// i need to store the good and bad proxies with their capture in a seperate file
+		// then i should focus on the multithreading part , im probably going to use same
+		// simple algorithm that i used in the C# code , since its minimal and easy to maintain
+		// but it should probably be done better and i should consider edge cases . 
+		// such as when we load 706 proxies and the user wants 10 proxy , then each proxy
+		// is going to check 100 proxies and the last 6 is a leftover , so we need another
+		// extra thread or one of the exisiting threads to finish the job by checking those 
+		// 6 proxies as well
+		// TODO
+		// we need to implement multiple profile , some of them with heavy capturing and with 
+		// the focus on quality of proxy , another one could be super lightweight to just
+		// find alive proxies in a very short time , without any capture 
+		// some capturing ideas : country , speed(kb , libcurl as functions) , response time
+		// TODO 
+		// the gui can be can be easily be improved , raylib is super flexible and we can do
+		// some insane stuff , make the app looks very modern while the backend is super
+		// lightweight , cool stuff overall
+		// TODO
+		// extra buttons on the gui => loading proxies , saving proxies , opening results ( good and bad)
+		// need some labels for goods and bads
+		// also a controlbar so that the user can select profiles , edit profiles , and his own
+		// checking config , and capable saving of his config
+		// the config setting should probably be in a seperate tab , which you can click on
+		// and then raylib will render that tab as the main tab , and the setting tab should
+		// let the user customize lots of stuff , selecting profiles and editing them or removing them
+		// creating profile with many options , such as timeout , checking website
+		// TODO 
+		// we can implement multiple checking config in a same config , idk maybe checking the proxies
+		// twice , each on different website , each with its own config , for example one of them
+		// could check if the proxy bypasses something , another one can just check if its alive
+		
+		// TODO TODO TODO TODO
+		// we can do extensive research and experiment on proxy checking and finding
+		// edge cases , fixing them , improving them , abusing them , but probably needs lots of
+		// testing on different stuff
+		// we could also add a proxy grabber => a seperate app maybe? xd 
+		// TODO TODO TODO TODO 
+		
+		
+		
 		while (j <= totalproxies){
-			
 			j++;
 		}
-
+		
 		// Update mouse position
 		int mousePosX = GetMouseX();
 		int mousePosY = GetMouseY();
