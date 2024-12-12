@@ -20,9 +20,9 @@
 
 ## TODO
 ### Functional Enhancements
-- **Threaded Requests**: Implement multithreading to handle proxy validation for better performance.
-- **Proxy Save Feature**: Save categorized proxies to separate text files including additional information regarding each proxy and its requests in (`good_proxies.txt` and `bad_proxies.txt`).
-- **Reqest Handling**: Implement many options for configuring the proxies and their requests , such as terminating a request if its being blocked by cf or stuff like that.
+- **Threaded Requests**: Implement multithreading to handle proxy validation for better performance ( its already done , i just need to figure out how im going to use it with raylib).
+- **Proxy Save Feature**: Save categorized proxies to separate text files including additional information regarding each proxy and its requests in (`good_proxies.txt` and `bad_proxies.txt`)( its already done , i just need to figure out how im going to use it with raylib).
+- **Reqest Handling**: Implement many options for configuring the proxies and their requests , such as terminating a request if its being blocked by cf or stuff like that( its already done , i just need to figure out how im going to use it with raylib).
 - **Advanced Filtering**: Add options to filter proxies based on specific criteria (e.g., response time, country, website filtering).
 - **Advanced Profiles**: Add option to create different profiles , and and customize each profile to your need.
 
