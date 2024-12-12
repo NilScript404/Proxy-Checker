@@ -1,6 +1,6 @@
 # Proxy Checker
 
-**Proxy Checker** is a lightweight application built in **C**, designed to validate and manage proxy servers. This tool leverages **Raylib** for UI rendering and **libcurl** for HTTP requests, providing a graphical interface to check the functionality of proxies and categorize them as "Good" or "Bad". note that this project is about 25% done , and many features are still left, since i wanted this proxy checker to be very versatile and unique.
+**Proxy Checker** is going to be a very vesatile and advanced Proxy checker written in C , with the help of Raylib for the ui and libcurl for handling the request. i wanted this project to be a little different and more complex than a typical proxy checker , in terms of both the implemenation and the ideas. please note that this is a work in progess and its not even close to working ( the proxy Checker which is written in C# is pretty good and ready , you can use that), and its just made as a hobby, i will update this project whenever im bored and just feel like it.
 
 ## Features
 - **Interactive UI**: Built with Raylib, featuring a simple and modern graphical interface.
